@@ -29,7 +29,7 @@ sh tomcat_deployer.sh [operation] [options] [<goal(s)>] [<phase(s)>]
 
 ```sh
 $ sh tomcat_deployer.sh deploy --remote-user root --remote-ip remotehost --remote-path /usr/share/tomcat --local-path /c/Users/Fatih/myJavaProject --package-name my-java-project
------------------------------- TOMCAT DEPLOYER ----------------------- 0.0.1
+------------------------------ TOMCAT DEPLOYER ----------------------- 0.0.2
 [ INFO ] Starting for deploy mode.
   remote_user  : root
   remote_ip    : remotehost
@@ -38,6 +38,9 @@ $ sh tomcat_deployer.sh deploy --remote-user root --remote-ip remotehost --remot
   package_name : my-java-project
 ----------------------------------------------------------------------------
 Authorized users only. All activity may be monitored and reported.
+[ WARN ] Last built my-java-project may not be up-to-date. Do you want to rebuild package? (Y/n):
+y
+[ INFO ] mvn build my-java-project success.
 Authorized users only. All activity may be monitored and reported.
 my-java-project.war                                                     100%
 Do you want to restart tomcat? (Y/n):

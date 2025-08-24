@@ -2,7 +2,7 @@
 
 # Deployer Information
 deployer_name="Tomcat Deployer"
-deployer_version="0.0.1"
+deployer_version="0.0.2"
 
 # Help Information
 _help() {
@@ -72,8 +72,31 @@ remote_conn="$remote_user@$remote_ip"
 ####################################################################################################
 
 deploy_package () {
+  # Check package for up-to-date
+  build_if_required
+
   # Upload Package from Local to Remote Server
   scp "$local_path/target/$package_name.war" $remote_conn:$remote_path/webapps/
+}
+
+build_if_required() {
+  local last_changed_file
+  last_changed_file=$(find "$local_path" -type f -printf '%T+ %p\n' | sort -r | head -n 1 | cut -d' ' -f2-)
+  if [[ ! "$last_changed_file" == *.war ]]; then
+    echo "[ WARN ] Last built $package_name may not be up-to-date. Do you want to rebuild package? (Y/n):"
+    read is_build
+    if [[ ${is_build^^} == 'YES' || ${is_build^^} == 'Y' ]]; then
+      cd $local_path/ && mvn -DskipTests=true clean install | while read line; do
+        if [[ "$line" == *"BUILD SUCCESS"* ]]; then
+          echo "[ INFO ] mvn build $package_name success."
+          break
+        elif [[ "$line" == *"ERROR"* ]]; then
+          echo $line
+          finish 1
+        fi
+      done
+    fi
+  fi
 }
 
 restart_tomcat () {
