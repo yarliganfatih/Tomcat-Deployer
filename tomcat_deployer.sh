@@ -2,7 +2,7 @@
 
 # Deployer Information
 deployer_name="Tomcat Deployer"
-deployer_version="0.0.2"
+deployer_version="0.0.3"
 
 # Help Information
 _help() {
@@ -67,6 +67,7 @@ operation_mode="$1"
 operation_result="Success"
 
 # Global Variables
+skip_ssh_errors=1
 remote_conn="$remote_user@$remote_ip"
 
 ####################################################################################################
@@ -99,6 +100,60 @@ build_if_required() {
   fi
 }
 
+update_package () {
+  changed_list=($(cd $local_path && git diff --name-only HEAD))
+
+  # Check changed files
+  if [ ${#changed_list[@]} -eq 0 ]; then
+    echo "[ WARN ] No changed file detected to able to deploy."
+    operation_result="Stopped"
+    finish 1
+  fi
+
+  # Display changed files
+  echo "[ INFO ] Changed files detected:"
+  for file in "${changed_list[@]}"; do
+    echo "  - $file"
+  done
+  
+  # Check package for up-to-date
+  build_if_required
+
+  # Upload your changed files from Local to Remote Server
+  echo "[ INFO ] Starting to upload files to server."
+  for file in "${changed_list[@]}"; do
+    upload_file $file
+  done
+  echo "[ INFO ] All changes updated successfully."
+}
+
+upload_file() {
+  file="$1"
+  echo "[ INFO ] Uploading $file"
+  if [[ "$file" == src/main/resources/* ]]; then
+    resource_path="${file#src/main/resources/}"
+    local_file="$local_path/target/classes/$resource_path"
+    remote_file="$remote_path/webapps/$package_name/$resource_path"
+    _ssh "mkdir -p \"$(dirname "$remote_file")\""
+    _scp "$local_file" "$remote_file"
+  elif [[ "$file" == src/main/java/* ]]; then
+    class_path="${file#src/main/java/}"
+    class_path="${class_path%.java}.class"
+    local_file="$local_path/target/classes/$class_path"
+    remote_file="$remote_path/webapps/$package_name/WEB-INF/classes/$class_path"
+    _ssh "mkdir -p \"$(dirname "$remote_file")\""
+    _scp "$local_file" "$remote_file"
+  elif [[ "$file" == src/main/webapp/* ]]; then
+    web_path="${file#src/main/webapp/}"
+    local_file="$local_path/src/main/webapp/$web_path"
+    remote_file="$remote_path/webapps/$package_name/$web_path"
+    _ssh "mkdir -p \"$(dirname "$remote_file")\""
+    _scp "$local_file" "$remote_file"
+  else
+    echo "[ WARN ] Unhandled file: $file (manual upload may be required)"
+  fi
+}
+
 restart_tomcat () {
   echo "Do you want to restart tomcat? (Y/n):"
   read is_restart
@@ -120,6 +175,38 @@ finish () {
 
   echo "[ INFO ] >>> ${operation_mode^^} ${operation_result^^} <<<"
   exit $1
+}
+
+after_error () {
+  operation_result="Failure"
+  if [ $skip_ssh_errors -eq 0 ]; then
+    finish 1
+  fi
+}
+
+catch_error () {
+  while IFS= read -r line; do
+    if [[ "$line" != "Authorized users only." && "$line" != *"All activity may be monitored and reported." ]]; then
+      echo "$1 : $line"
+      return 1
+    fi
+  done
+  echo "  $1 executed successfully."
+  return 0
+}
+
+_ssh () {
+  ssh $remote_conn $1 2>&1 | catch_error "SSH command"
+  if [ $? -eq 1 ]; then
+    after_error 0
+  fi
+}
+
+_scp () {
+  scp $1 $remote_conn:$2 2>&1 | catch_error "Upload operation"
+  if [ $? -eq 1 ]; then
+    after_error 0
+  fi
 }
 
 ####################################################################################################
@@ -159,7 +246,9 @@ init () {
 
   # Check and Execute Operation
   if [[ ${operation_mode^^} == "DEPLOY" ]]; then
-    deploy_package
+    deploy_package  
+  elif [[ ${operation_mode^^} == "UPDATE" ]]; then
+    update_package
   else
     echo "[ WARN ] Invalid operation mode: $operation_mode"
     finish 1

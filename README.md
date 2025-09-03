@@ -50,3 +50,42 @@ Tomcat stopped.
 Tomcat started.
 [ INFO ] >>> DEPLOY SUCCESS <<<
 ```
+
+### Update Mode
+Transfer only your changed files by git command.
+```sh
+$ sh tomcat_deployer.sh update --remote-user root --remote-ip remotehost --remote-path /usr/share/tomcat --local-path /c/Users/Fatih/myJavaProject --package-name my-java-project
+------------------------------ TOMCAT DEPLOYER ----------------------- 0.0.3
+[ INFO ] Starting for update mode.
+  remote_user  : root
+  remote_ip    : remotehost
+  remote_path  : /usr/share/tomcat
+  local_path   : /c/Users/Fatih/myJavaProject
+  package_name : my-java-project
+----------------------------------------------------------------------------
+Authorized users only. All activity may be monitored and reported.
+[ INFO ] Changed files detected:
+  - src/main/resources/applicationContext.xml
+  - src/main/java/com/myjavaproject/MyApplication.java
+  - src/main/webapp/index.html
+[ WARN ] Last built my-java-project may not be up-to-date. Do you want to rebuild package? (Y/n):
+y
+[ INFO ] mvn build my-java-project success.
+[ INFO ] Starting to upload files to server.
+[ INFO ] Uploading src/main/resources/applicationContext.xml
+  SSH command executed successfully.
+  Upload operation executed successfully.
+[ INFO ] Uploading src/main/java/com/myjavaproject/MyApplication.java
+  SSH command executed successfully.
+  Upload operation executed successfully.
+[ INFO ] Uploading src/main/webapp/index.html
+  SSH command executed successfully.
+  Upload operation executed successfully.
+[ INFO ] All changes updated successfully.
+Do you want to restart tomcat? (Y/n):
+y
+Authorized users only. All activity may be monitored and reported.
+Tomcat stopped.
+Tomcat started.
+[ INFO ] >>> UPDATE SUCCESS <<<
+```
