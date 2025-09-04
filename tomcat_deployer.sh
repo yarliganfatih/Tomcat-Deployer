@@ -65,14 +65,19 @@ done
 # Arguments
 operation_mode="$1"
 operation_result="Success"
+operation_date=$(date +"%Y_%m_%d__%H_%M")
 
 # Global Variables
 skip_ssh_errors=1
 remote_conn="$remote_user@$remote_ip"
+remote_backup_path="$remote_path/temp/backups/$package_name/$operation_date"
 
 ####################################################################################################
 
 deploy_package () {
+  # Backup current package on remote server
+  backup
+
   # Check package for up-to-date
   build_if_required
 
@@ -115,6 +120,9 @@ update_package () {
   for file in "${changed_list[@]}"; do
     echo "  - $file"
   done
+
+  # Backup current package on remote server
+  backup
   
   # Check package for up-to-date
   build_if_required
@@ -151,6 +159,18 @@ upload_file() {
     _scp "$local_file" "$remote_file"
   else
     echo "[ WARN ] Unhandled file: $file (manual upload may be required)"
+  fi
+}
+
+backup () {
+  echo "Do you want to back up $package_name package on server? (Y/n):"
+  read is_backup
+  if [[ ${is_backup^^} == 'YES' || ${is_backup^^} == 'Y' ]]; then
+    _ssh "mkdir -p $remote_backup_path/"
+    ssh $remote_conn "rsync -avq --ignore-errors $remote_package_path $remote_backup_path/" # custom ssh for output
+    echo "[ INFO ] Backup is taken in $remote_backup_path/ folder."
+    echo "[ INFO ] You can rollback with this command on remote server :"
+    echo "  > cp -rfa $remote_backup_path/$package_name/ $remote_path/webapps/"
   fi
 }
 

@@ -29,7 +29,7 @@ sh tomcat_deployer.sh [operation] [options] [<goal(s)>] [<phase(s)>]
 
 ```sh
 $ sh tomcat_deployer.sh deploy --remote-user root --remote-ip remotehost --remote-path /usr/share/tomcat --local-path /c/Users/Fatih/myJavaProject --package-name my-java-project
------------------------------- TOMCAT DEPLOYER ----------------------- 0.0.2
+------------------------------ TOMCAT DEPLOYER ----------------------- 0.0.4
 [ INFO ] Starting for deploy mode.
   remote_user  : root
   remote_ip    : remotehost
@@ -38,6 +38,13 @@ $ sh tomcat_deployer.sh deploy --remote-user root --remote-ip remotehost --remot
   package_name : my-java-project
 ----------------------------------------------------------------------------
 Authorized users only. All activity may be monitored and reported.
+Do you want to back up my-java-project package on server? (Y/n):
+y
+  SSH command executed successfully.
+Authorized users only. All activity may be monitored and reported.
+[ INFO ] Backup is taken in /usr/share/tomcat/temp/backups/my-java-project/ folder.
+[ INFO ] You can rollback with this command on remote server :
+  > cp -rfa /usr/share/tomcat/temp/backups/my-java-project/ /usr/share/tomcat/webapps/
 [ WARN ] Last built my-java-project may not be up-to-date. Do you want to rebuild package? (Y/n):
 y
 [ INFO ] mvn build my-java-project success.
@@ -55,7 +62,7 @@ Tomcat started.
 Transfer only your changed files by git command.
 ```sh
 $ sh tomcat_deployer.sh update --remote-user root --remote-ip remotehost --remote-path /usr/share/tomcat --local-path /c/Users/Fatih/myJavaProject --package-name my-java-project
------------------------------- TOMCAT DEPLOYER ----------------------- 0.0.3
+------------------------------ TOMCAT DEPLOYER ----------------------- 0.0.4
 [ INFO ] Starting for update mode.
   remote_user  : root
   remote_ip    : remotehost
@@ -68,6 +75,13 @@ Authorized users only. All activity may be monitored and reported.
   - src/main/resources/applicationContext.xml
   - src/main/java/com/myjavaproject/MyApplication.java
   - src/main/webapp/index.html
+Do you want to back up my-java-project package on server? (Y/n):
+y
+  SSH command executed successfully.
+Authorized users only. All activity may be monitored and reported.
+[ INFO ] Backup is taken in /usr/share/tomcat/temp/backups/my-java-project/ folder.
+[ INFO ] You can rollback with this command on remote server :
+  > cp -rfa /usr/share/tomcat/temp/backups/my-java-project/ /usr/share/tomcat/webapps/
 [ WARN ] Last built my-java-project may not be up-to-date. Do you want to rebuild package? (Y/n):
 y
 [ INFO ] mvn build my-java-project success.
