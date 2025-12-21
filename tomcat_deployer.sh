@@ -2,7 +2,7 @@
 
 # Deployer Information
 deployer_name="Tomcat Deployer"
-deployer_version="0.0.5"
+deployer_version="0.0.6"
 
 # Help Information
 _help() {
@@ -122,18 +122,24 @@ build_if_required() {
 }
 
 update_package () {
-  changed_list=($(cd $local_path && git diff --name-only HEAD))
+  changed_list=($(cd $local_path && git diff --name-only --diff-filter=d HEAD))
+  deleted_list=($(cd $local_path && git diff --name-only --diff-filter=D HEAD))
+  to_update_list=()
 
-  # Check changed files
-  if [ ${#changed_list[@]} -eq 0 ]; then
-    echo "[ WARN ] No changed file detected to able to deploy."
+  # Check changes
+  if [[ ${#changed_list[@]} -eq 0 || ${#deleted_list[@]} -eq 0 ]]; then
+    echo "[ WARN ] No change detected to able to deploy."
     operation_result="Stopped"
     finish 1
   fi
 
-  # Display changed files
+  # Display changes
   echo "[ INFO ] Changed files detected:"
   for file in "${changed_list[@]}"; do
+    echo "  - $file"
+  done
+  echo "[ INFO ] Deleted files detected:"
+  for file in "${deleted_list[@]}"; do
     echo "  - $file"
   done
 
@@ -143,40 +149,56 @@ update_package () {
   # Check package for up-to-date
   build_if_required
 
-  # Upload your changed files from Local to Remote Server
-  echo "[ INFO ] Starting to upload files to server."
+  # Update your changes from Local to Remote Server
+  echo "[ INFO ] Starting to update files on server."
   for file in "${changed_list[@]}"; do
-    upload_file $file
+    update_file "upload" "$file"
   done
+  for file in "${deleted_list[@]}"; do
+    update_file "delete" "$file"
+  done
+
+  if [ ! ${#to_update_list[@]} -eq 0 ]; then
+    echo "[ WARN ] Files to planned update manually :"
+    for file in "${to_update_list[@]}"; do
+      echo "  - $file"
+    done
+    echo "  If you updated manually these files, Press any key to continue:"
+    read for_wait
+  fi
+
   if [[ ${operation_result^^} == "SUCCESS" ]]; then
     echo "[ INFO ] All changes updated successfully."
   fi
 }
 
-upload_file() {
-  file="$1"
-  echo "[ INFO ] Uploading $file"
+update_file() {
+  file="$2"
   if [[ "$file" == src/main/resources/* ]]; then
     resource_path="${file#src/main/resources/}"
     local_file="$local_path/target/classes/$resource_path"
     remote_file="$remote_path/webapps/$package_name/WEB-INF/classes/$resource_path"
-    _ssh "mkdir -p \"$(dirname "$remote_file")\""
-    _scp "$local_file" "$remote_file"
   elif [[ "$file" == src/main/java/* ]]; then
     class_path="${file#src/main/java/}"
     class_path="${class_path%.java}.class"
     local_file="$local_path/target/classes/$class_path"
     remote_file="$remote_path/webapps/$package_name/WEB-INF/classes/$class_path"
-    _ssh "mkdir -p \"$(dirname "$remote_file")\""
-    _scp "$local_file" "$remote_file"
   elif [[ "$file" == src/main/webapp/* ]]; then
     web_path="${file#src/main/webapp/}"
     local_file="$local_path/src/main/webapp/$web_path"
     remote_file="$remote_path/webapps/$package_name/$web_path"
+  else
+    to_update_list+=($file)
+    echo "[ WARN ] Unhandled file: $file (manual upload may be required)"
+    return 1
+  fi
+  if [[ "$1" == "upload" ]]; then
+    echo "[ INFO ] Uploading $file"
     _ssh "mkdir -p \"$(dirname "$remote_file")\""
     _scp "$local_file" "$remote_file"
-  else
-    echo "[ WARN ] Unhandled file: $file (manual upload may be required)"
+  elif [[ "$1" == "delete" ]]; then
+    echo "[ INFO ] Removing $file"
+    _ssh "rm -f \"$remote_file\""
   fi
 }
 

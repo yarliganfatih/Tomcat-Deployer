@@ -29,7 +29,7 @@ sh tomcat_deployer.sh [operation] [options] [<goal(s)>] [<phase(s)>]
 
 ```sh
 $ sh ./tomcat_deployer.sh deploy --remote-user yarligan -remote-ip localhost --remote-port 2222 --remote-path /opt/tomcat9 --local-path /c/Users/Fatih/restapi --package-name restapi_draft
------------------------------- TOMCAT DEPLOYER ----------------------- 0.0.5
+------------------------------ TOMCAT DEPLOYER ----------------------- 0.0.6
 [ INFO ] Starting for deploy mode.
   remote_user  : yarligan
   remote_ip    : localhost
@@ -61,7 +61,7 @@ Tomcat started.
 Transfer only your changed files by git command.
 ```sh
 $ sh ./tomcat_deployer.sh update --remote-user yarligan -remote-ip localhost --remote-port 2222 --remote-path /opt/tomcat9 --local-path /c/Users/Fatih/restapi --package-name restapi_draft
------------------------------- TOMCAT DEPLOYER ----------------------- 0.0.5
+------------------------------ TOMCAT DEPLOYER ----------------------- 0.0.6
 [ INFO ] Starting for update mode.
   remote_user  : yarligan
   remote_ip    : localhost
@@ -71,24 +71,34 @@ $ sh ./tomcat_deployer.sh update --remote-user yarligan -remote-ip localhost --r
   package_name : restapi_draft
 ----------------------------------------------------------------------------
 [ INFO ] Changed files detected:
+  - pom.xml
   - src/main/java/com/draft/restapi/model/User.java
   - src/main/resources/application.properties
+[ INFO ] Deleted files detected:
+  - src/main/java/com/draft/restapi/controller/UserController.java
 [ INFO ] Do you want to back up restapi_draft package on server? (Y/n):
 y
   SSH command executed successfully.
-[ INFO ] Backup is taken in /opt/tomcat9/temp/backups/restapi_draft/2025_12_21__18_08/ folder.
+[ INFO ] Backup is taken in /opt/tomcat9/temp/backups/restapi_draft/2025_12_21__20_25/ folder.
 [ INFO ] You can rollback with this command on remote server :
-  > cp -rfa /opt/tomcat9/temp/backups/restapi_draft/2025_12_21__18_08/restapi_draft/ /opt/tomcat9/webapps/
+  > cp -rfa /opt/tomcat9/temp/backups/restapi_draft/2025_12_21__20_25/restapi_draft/ /opt/tomcat9/webapps/
 [ WARN ] Last built restapi_draft may not be up-to-date. Do you want to rebuild package? (Y/n):
 y
 [ INFO ] mvn build restapi_draft success.
-[ INFO ] Starting to upload files to server.
+[ INFO ] Starting to update files on server.
+[ WARN ] Unhandled file: pom.xml (manual upload may be required)
 [ INFO ] Uploading src/main/java/com/draft/restapi/model/User.java
   SSH command executed successfully.
   Upload operation executed successfully.
 [ INFO ] Uploading src/main/resources/application.properties
   SSH command executed successfully.
   Upload operation executed successfully.
+[ INFO ] Removing src/main/java/com/draft/restapi/controller/UserController.java
+  SSH command executed successfully.
+[ WARN ] Files to planned update manually :
+  - pom.xml
+  If you updated manually these files, Press any key to continue:
+
 [ INFO ] All changes updated successfully.
 [ INFO ] Do you want to restart tomcat? (Y/n):
 y
