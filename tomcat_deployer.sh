@@ -2,7 +2,7 @@
 
 # Deployer Information
 deployer_name="Tomcat Deployer"
-deployer_version="0.0.6"
+deployer_version="0.0.7"
 
 # Help Information
 _help() {
@@ -80,8 +80,13 @@ operation_date=$(date +"%Y_%m_%d__%H_%M")
 
 # Global Variables
 skip_ssh_errors=1
+changed_list=()
+deleted_list=()
+to_update_list=()
 remote_conn="$remote_user@$remote_ip"
 remote_backup_path="$remote_path/temp/backups/$package_name/$operation_date"
+remote_history_path="$remote_path/temp/deploy_history/$package_name"
+remote_package_path="$remote_path/webapps/$package_name"
 
 ####################################################################################################
 
@@ -94,11 +99,16 @@ deploy_package () {
 
   # Remove current package on remote server
   echo "[ INFO ] Removing current $package_name package on server."
-  _ssh "rm -rf $remote_path/webapps/$package_name && rm -f $remote_path/webapps/$package_name.war"
+  _ssh "rm -rf $remote_package_path && rm -f $remote_package_path.war"
 
   # Upload Package from Local to Remote Server
   echo "[ INFO ] Uploading $package_name package to server."
   scp -P $remote_port "$local_path/target/$package_name.war" $remote_conn:$remote_path/webapps/
+
+  # Save change history
+  deleted_list=("$package_name.war")
+  changed_list=("$package_name.war")
+  save_history
 }
 
 build_if_required() {
@@ -167,6 +177,9 @@ update_package () {
     read for_wait
   fi
 
+  # Save change history
+  save_history
+
   if [[ ${operation_result^^} == "SUCCESS" ]]; then
     echo "[ INFO ] All changes updated successfully."
   fi
@@ -177,16 +190,16 @@ update_file() {
   if [[ "$file" == src/main/resources/* ]]; then
     resource_path="${file#src/main/resources/}"
     local_file="$local_path/target/classes/$resource_path"
-    remote_file="$remote_path/webapps/$package_name/WEB-INF/classes/$resource_path"
+    remote_file="$remote_package_path/WEB-INF/classes/$resource_path"
   elif [[ "$file" == src/main/java/* ]]; then
     class_path="${file#src/main/java/}"
     class_path="${class_path%.java}.class"
     local_file="$local_path/target/classes/$class_path"
-    remote_file="$remote_path/webapps/$package_name/WEB-INF/classes/$class_path"
+    remote_file="$remote_package_path/WEB-INF/classes/$class_path"
   elif [[ "$file" == src/main/webapp/* ]]; then
     web_path="${file#src/main/webapp/}"
     local_file="$local_path/src/main/webapp/$web_path"
-    remote_file="$remote_path/webapps/$package_name/$web_path"
+    remote_file="$remote_package_path/$web_path"
   else
     to_update_list+=($file)
     echo "[ WARN ] Unhandled file: $file (manual upload may be required)"
@@ -200,6 +213,24 @@ update_file() {
     echo "[ INFO ] Removing $file"
     _ssh "rm -f \"$remote_file\""
   fi
+}
+
+save_history () {
+  rm -f changes.log
+  _ssh "mkdir -p $remote_history_path/"
+  _ssh_out "cat $remote_history_path/changes.log" > changes.log
+  echo "--- $operation_date ---" >> changes.log
+  for file in "${deleted_list[@]}"; do
+    echo "deleted $file" >> changes.log
+  done
+  for file in "${changed_list[@]}"; do
+    echo "updated $file" >> changes.log
+  done
+  for file in "${to_update_list[@]}"; do
+    echo "updated $file manually" >> changes.log
+  done
+  _scp "changes.log" "$remote_history_path/changes.log"
+  rm -f changes.log
 }
 
 backup () {
@@ -260,6 +291,10 @@ _ssh () {
   if [ $? -eq 1 ]; then
     after_error 0
   fi
+}
+
+_ssh_out () {
+  ssh -p $remote_port $remote_conn $1 2>/dev/null
 }
 
 _scp () {
