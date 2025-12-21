@@ -2,7 +2,7 @@
 
 # Deployer Information
 deployer_name="Tomcat Deployer"
-deployer_version="0.0.3"
+deployer_version="0.0.5"
 
 # Help Information
 _help() {
@@ -25,13 +25,22 @@ General options:
 Required options for operaions:
 -u, -remote-user,    --remote-user <user>    Remote server user name.
 -i, -remote-ip,      --remote-ip <ip>        Remote server IP address.
+-p, -remote-port,    --remote-port <port>    Remote server SSH port. Default is 22.
 -r, -remote-path,    --remote-path <path>    Remote server path (Tomcat path) to deploy.
 -l, -local-path,     --local-path <path>     Local path of your project.
--p, -package-name,   --package-name <name>   Package name to deploy.
+-n, -package-name,   --package-name <name>   Package name to deploy.
 EOF
 }
 
-options=$(getopt -l "help,version,verbose,xtrace,remote-user:,remote-ip:,remote-path:,local-path:,package-name:" -o "hvVXu:i:r:l:p:" -a -- "$@")
+# Default Values
+remote_user=""
+remote_ip=""
+remote_port="22"
+remote_path="/usr/share/tomcat"
+local_path="./"
+package_name=""
+
+options=$(getopt -l "help,version,verbose,xtrace,remote-user:,remote-ip:,remote-port:,remote-path:,local-path:,package-name:" -o "hvVXu:i:p:r:l:n:" -a -- "$@")
 eval set -- "$options"
 while true; do
   case "$1" in
@@ -49,11 +58,13 @@ while true; do
     remote_user="$2";;
   -i|--remote-ip)
     remote_ip="$2";;
+  -p|--remote-port)
+    remote_port="$2";;
   -r|--remote-path)
     remote_path="$2";;
   -l|--local-path)
     local_path="$2";;
-  -p|--package-name)
+  -n|--package-name)
     package_name="$2";;
   --)
     shift
@@ -81,8 +92,13 @@ deploy_package () {
   # Check package for up-to-date
   build_if_required
 
+  # Remove current package on remote server
+  echo "[ INFO ] Removing current $package_name package on server."
+  _ssh "rm -rf $remote_path/webapps/$package_name && rm -f $remote_path/webapps/$package_name.war"
+
   # Upload Package from Local to Remote Server
-  scp "$local_path/target/$package_name.war" $remote_conn:$remote_path/webapps/
+  echo "[ INFO ] Uploading $package_name package to server."
+  scp -P $remote_port "$local_path/target/$package_name.war" $remote_conn:$remote_path/webapps/
 }
 
 build_if_required() {
@@ -132,7 +148,9 @@ update_package () {
   for file in "${changed_list[@]}"; do
     upload_file $file
   done
-  echo "[ INFO ] All changes updated successfully."
+  if [[ ${operation_result^^} == "SUCCESS" ]]; then
+    echo "[ INFO ] All changes updated successfully."
+  fi
 }
 
 upload_file() {
@@ -141,7 +159,7 @@ upload_file() {
   if [[ "$file" == src/main/resources/* ]]; then
     resource_path="${file#src/main/resources/}"
     local_file="$local_path/target/classes/$resource_path"
-    remote_file="$remote_path/webapps/$package_name/$resource_path"
+    remote_file="$remote_path/webapps/$package_name/WEB-INF/classes/$resource_path"
     _ssh "mkdir -p \"$(dirname "$remote_file")\""
     _scp "$local_file" "$remote_file"
   elif [[ "$file" == src/main/java/* ]]; then
@@ -163,11 +181,11 @@ upload_file() {
 }
 
 backup () {
-  echo "Do you want to back up $package_name package on server? (Y/n):"
+  echo "[ INFO ] Do you want to back up $package_name package on server? (Y/n):"
   read is_backup
   if [[ ${is_backup^^} == 'YES' || ${is_backup^^} == 'Y' ]]; then
     _ssh "mkdir -p $remote_backup_path/"
-    ssh $remote_conn "rsync -avq --ignore-errors $remote_package_path $remote_backup_path/" # custom ssh for output
+    ssh -p $remote_port $remote_conn "rsync -avq --ignore-errors $remote_package_path $remote_backup_path/" # custom ssh for output
     echo "[ INFO ] Backup is taken in $remote_backup_path/ folder."
     echo "[ INFO ] You can rollback with this command on remote server :"
     echo "  > cp -rfa $remote_backup_path/$package_name/ $remote_path/webapps/"
@@ -175,10 +193,10 @@ backup () {
 }
 
 restart_tomcat () {
-  echo "Do you want to restart tomcat? (Y/n):"
+  echo "[ INFO ] Do you want to restart tomcat? (Y/n):"
   read is_restart
   if [[ ${is_restart^^} == 'YES' || ${is_restart^^} == 'Y' ]]; then
-    ssh $remote_conn "cd $remote_path/bin && JAVA_HOME=/usr/java/latest ./shutdown.sh | grep 'Tomcat st' || true && JAVA_HOME=/usr/java/latest ./shutdown.sh | grep 'Tomcat st' || true && JAVA_HOME=/usr/java/latest ./startup.sh | grep 'Tomcat st'" 2>/dev/null
+    ssh -p $remote_port $remote_conn "cd $remote_path/bin && sh ./shutdown.sh | grep 'Tomcat st' || true && sh ./startup.sh | grep 'Tomcat st'" 2>/dev/null
   fi
 }
 
@@ -216,14 +234,14 @@ catch_error () {
 }
 
 _ssh () {
-  ssh $remote_conn $1 2>&1 | catch_error "SSH command"
+  ssh -p $remote_port $remote_conn $1 2>&1 | catch_error "SSH command"
   if [ $? -eq 1 ]; then
     after_error 0
   fi
 }
 
 _scp () {
-  scp $1 $remote_conn:$2 2>&1 | catch_error "Upload operation"
+  scp -P $remote_port $1 $remote_conn:$2 2>&1 | catch_error "Upload operation"
   if [ $? -eq 1 ]; then
     after_error 0
   fi
@@ -237,11 +255,19 @@ init () {
   echo "[ INFO ] Starting for $operation_mode mode."
   echo "  remote_user  : $remote_user"
   echo "  remote_ip    : $remote_ip"
+  echo "  remote_port  : $remote_port"
   echo "  remote_path  : $remote_path"
   echo "  local_path   : $local_path"
   echo "  package_name : $package_name"
   echo "----------------------------------------------------------------------------"
-
+  
+  # Check Required Options
+  if [ -z "$remote_user" ] || [ -z "$remote_ip" ] || [ -z "$remote_port" ] || [ -z "$remote_path" ] || [ -z "$local_path" ] || [ -z "$package_name" ]; then
+    echo "[ WARN ] Missing required options. Please provide all required options."
+    echo "  Please check the help information with -h or --help."
+    finish 1
+  fi
+  
   # Check Local Configuration
   if [ ! -f ~/.ssh/id_rsa.pub ]; then
     echo "[ WARN ] You need to create SSH KEY named id_rsa. Recommended to pass the password steps directly."
@@ -251,16 +277,9 @@ init () {
   local_id_rsa=$(cat ~/.ssh/id_rsa.pub)
 
   # Check And Authorize Remote Configuration
-  ssh $remote_conn "grep -Fxq \"$local_id_rsa\" ~/.ssh/authorized_keys || echo \"$local_id_rsa\" >> ~/.ssh/authorized_keys" 2>&1
+  ssh -p $remote_port $remote_conn "grep -Fxq \"$local_id_rsa\" ~/.ssh/authorized_keys || echo \"$local_id_rsa\" >> ~/.ssh/authorized_keys" 2>&1
   ssh_exit_code=$?
   if [ $ssh_exit_code -ne 0 ]; then
-    finish 1
-  fi
-  
-  # Check Required Options
-  if [ -z "$remote_user" ] || [ -z "$remote_ip" ] || [ -z "$remote_path" ] || [ -z "$local_path" ] || [ -z "$package_name" ]; then
-    echo "[ WARN ] Missing required options. Please provide all required options."
-    echo "  Please check the help information with -h or --help."
     finish 1
   fi
 

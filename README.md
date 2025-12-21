@@ -28,32 +28,31 @@ sh tomcat_deployer.sh [operation] [options] [<goal(s)>] [<phase(s)>]
 ## Deployment Scenario
 
 ```sh
-$ sh tomcat_deployer.sh deploy --remote-user root --remote-ip remotehost --remote-path /usr/share/tomcat --local-path /c/Users/Fatih/myJavaProject --package-name my-java-project
------------------------------- TOMCAT DEPLOYER ----------------------- 0.0.4
+$ sh ./tomcat_deployer.sh deploy --remote-user yarligan -remote-ip localhost --remote-port 2222 --remote-path /opt/tomcat9 --local-path /c/Users/Fatih/restapi --package-name restapi_draft
+------------------------------ TOMCAT DEPLOYER ----------------------- 0.0.5
 [ INFO ] Starting for deploy mode.
-  remote_user  : root
-  remote_ip    : remotehost
-  remote_path  : /usr/share/tomcat
-  local_path   : /c/Users/Fatih/myJavaProject
-  package_name : my-java-project
+  remote_user  : yarligan
+  remote_ip    : localhost
+  remote_port  : 2222
+  remote_path  : /opt/tomcat9
+  local_path   : /c/Users/Fatih/restapi
+  package_name : restapi_draft
 ----------------------------------------------------------------------------
-Authorized users only. All activity may be monitored and reported.
-Do you want to back up my-java-project package on server? (Y/n):
+[ INFO ] Do you want to back up restapi_draft package on server? (Y/n):
 y
   SSH command executed successfully.
-Authorized users only. All activity may be monitored and reported.
-[ INFO ] Backup is taken in /usr/share/tomcat/temp/backups/my-java-project/ folder.
+[ INFO ] Backup is taken in /opt/tomcat9/temp/backups/restapi_draft/2025_12_21__18_46/ folder.
 [ INFO ] You can rollback with this command on remote server :
-  > cp -rfa /usr/share/tomcat/temp/backups/my-java-project/ /usr/share/tomcat/webapps/
-[ WARN ] Last built my-java-project may not be up-to-date. Do you want to rebuild package? (Y/n):
+  > cp -rfa /opt/tomcat9/temp/backups/restapi_draft/2025_12_21__18_46/restapi_draft/ /opt/tomcat9/webapps/
+[ WARN ] Last built restapi_draft may not be up-to-date. Do you want to rebuild package? (Y/n):
 y
-[ INFO ] mvn build my-java-project success.
-Authorized users only. All activity may be monitored and reported.
-my-java-project.war                                                     100%
-Do you want to restart tomcat? (Y/n):
+[ INFO ] mvn build restapi_draft success.
+[ INFO ] Removing current restapi_draft package on server.
+  SSH command executed successfully.
+[ INFO ] Uploading restapi_draft package to server.
+restapi_draft.war                                                                                            100%   43MB 115.2MB/s   00:00    
+[ INFO ] Do you want to restart tomcat? (Y/n):
 y
-Authorized users only. All activity may be monitored and reported.
-Tomcat stopped.
 Tomcat started.
 [ INFO ] >>> DEPLOY SUCCESS <<<
 ```
@@ -61,45 +60,38 @@ Tomcat started.
 ### Update Mode
 Transfer only your changed files by git command.
 ```sh
-$ sh tomcat_deployer.sh update --remote-user root --remote-ip remotehost --remote-path /usr/share/tomcat --local-path /c/Users/Fatih/myJavaProject --package-name my-java-project
------------------------------- TOMCAT DEPLOYER ----------------------- 0.0.4
+$ sh ./tomcat_deployer.sh update --remote-user yarligan -remote-ip localhost --remote-port 2222 --remote-path /opt/tomcat9 --local-path /c/Users/Fatih/restapi --package-name restapi_draft
+------------------------------ TOMCAT DEPLOYER ----------------------- 0.0.5
 [ INFO ] Starting for update mode.
-  remote_user  : root
-  remote_ip    : remotehost
-  remote_path  : /usr/share/tomcat
-  local_path   : /c/Users/Fatih/myJavaProject
-  package_name : my-java-project
+  remote_user  : yarligan
+  remote_ip    : localhost
+  remote_port  : 2222
+  remote_path  : /opt/tomcat9
+  local_path   : /c/Users/Fatih/restapi
+  package_name : restapi_draft
 ----------------------------------------------------------------------------
-Authorized users only. All activity may be monitored and reported.
 [ INFO ] Changed files detected:
-  - src/main/resources/applicationContext.xml
-  - src/main/java/com/myjavaproject/MyApplication.java
-  - src/main/webapp/index.html
-Do you want to back up my-java-project package on server? (Y/n):
+  - src/main/java/com/draft/restapi/model/User.java
+  - src/main/resources/application.properties
+[ INFO ] Do you want to back up restapi_draft package on server? (Y/n):
 y
   SSH command executed successfully.
-Authorized users only. All activity may be monitored and reported.
-[ INFO ] Backup is taken in /usr/share/tomcat/temp/backups/my-java-project/ folder.
+[ INFO ] Backup is taken in /opt/tomcat9/temp/backups/restapi_draft/2025_12_21__18_08/ folder.
 [ INFO ] You can rollback with this command on remote server :
-  > cp -rfa /usr/share/tomcat/temp/backups/my-java-project/ /usr/share/tomcat/webapps/
-[ WARN ] Last built my-java-project may not be up-to-date. Do you want to rebuild package? (Y/n):
+  > cp -rfa /opt/tomcat9/temp/backups/restapi_draft/2025_12_21__18_08/restapi_draft/ /opt/tomcat9/webapps/
+[ WARN ] Last built restapi_draft may not be up-to-date. Do you want to rebuild package? (Y/n):
 y
-[ INFO ] mvn build my-java-project success.
+[ INFO ] mvn build restapi_draft success.
 [ INFO ] Starting to upload files to server.
-[ INFO ] Uploading src/main/resources/applicationContext.xml
+[ INFO ] Uploading src/main/java/com/draft/restapi/model/User.java
   SSH command executed successfully.
   Upload operation executed successfully.
-[ INFO ] Uploading src/main/java/com/myjavaproject/MyApplication.java
-  SSH command executed successfully.
-  Upload operation executed successfully.
-[ INFO ] Uploading src/main/webapp/index.html
+[ INFO ] Uploading src/main/resources/application.properties
   SSH command executed successfully.
   Upload operation executed successfully.
 [ INFO ] All changes updated successfully.
-Do you want to restart tomcat? (Y/n):
+[ INFO ] Do you want to restart tomcat? (Y/n):
 y
-Authorized users only. All activity may be monitored and reported.
-Tomcat stopped.
 Tomcat started.
 [ INFO ] >>> UPDATE SUCCESS <<<
 ```
