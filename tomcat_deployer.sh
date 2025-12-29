@@ -2,7 +2,7 @@
 
 # Deployer Information
 deployer_name="Tomcat Deployer"
-deployer_version="0.0.7"
+deployer_version="0.0.8"
 
 # Help Information
 _help() {
@@ -39,6 +39,7 @@ remote_port="22"
 remote_path="/usr/share/tomcat"
 local_path="./"
 package_name=""
+local_branch="main"
 
 options=$(getopt -l "help,version,verbose,xtrace,remote-user:,remote-ip:,remote-port:,remote-path:,local-path:,package-name:" -o "hvVXu:i:p:r:l:n:" -a -- "$@")
 eval set -- "$options"
@@ -91,11 +92,23 @@ remote_package_path="$remote_path/webapps/$package_name"
 ####################################################################################################
 
 deploy_package () {
+  deleted_list=("$package_name.war")
+  changed_list=("$package_name.war")
+  to_update_list=()
+
   # Backup current package on remote server
   backup
 
   # Check package for up-to-date
   build_if_required
+
+  # Check change history on remote server
+  check_history
+  if [[ $to_update_list -ne 0 ]]; then
+    echo "[ WARN ] Deploy operation may be cause conflicts."
+    operation_result="Stopped"
+    finish 1
+  fi
 
   # Remove current package on remote server
   echo "[ INFO ] Removing current $package_name package on server."
@@ -106,8 +119,6 @@ deploy_package () {
   scp -P $remote_port "$local_path/target/$package_name.war" $remote_conn:$remote_path/webapps/
 
   # Save change history
-  deleted_list=("$package_name.war")
-  changed_list=("$package_name.war")
   save_history
 }
 
@@ -137,7 +148,7 @@ update_package () {
   to_update_list=()
 
   # Check changes
-  if [[ ${#changed_list[@]} -eq 0 || ${#deleted_list[@]} -eq 0 ]]; then
+  if [[ ${#changed_list[@]} -eq 0 && ${#deleted_list[@]} -eq 0 ]]; then
     echo "[ WARN ] No change detected to able to deploy."
     operation_result="Stopped"
     finish 1
@@ -158,6 +169,9 @@ update_package () {
   
   # Check package for up-to-date
   build_if_required
+
+  # Check change history on remote server
+  check_history
 
   # Update your changes from Local to Remote Server
   echo "[ INFO ] Starting to update files on server."
@@ -187,6 +201,9 @@ update_package () {
 
 update_file() {
   file="$2"
+  if [[ " ${to_update_list[@]} " =~ " $file " ]]; then
+    return 1
+  fi
   if [[ "$file" == src/main/resources/* ]]; then
     resource_path="${file#src/main/resources/}"
     local_file="$local_path/target/classes/$resource_path"
@@ -215,22 +232,70 @@ update_file() {
   fi
 }
 
+check_history () {
+  echo "[ INFO ] Checking history on server."
+
+  remote_branch_files=$(_ssh_out "ls $remote_history_path/*.log")
+  for branch_file in $remote_branch_files; do
+    remote_branch=$(basename "$branch_file" .log)
+    
+    if [ "$remote_branch" == "$local_branch" ]; then
+      continue
+    fi
+
+    remote_branch_last_change=$(_ssh_out "date +%Y_%m_%d__%H_%M -r $remote_history_path/$remote_branch.log")
+    branch_history=$(_ssh_out "cat $branch_file")
+    for i in "${!changed_list[@]}"; do
+      file="${changed_list[$i]}"
+      if [[ " ${to_update_list[@]} " =~ " $file " ]]; then
+        continue
+      fi
+      if [[ "$branch_history" == *"$file"* ]]; then
+        echo "[ WARN ] $file was changed in $remote_branch branch before (last changed: $remote_branch_last_change)."
+        
+        while true; do
+          echo "Do you still want to update this file? (Overwrite/Manually/Stop): "
+          read is_overwrite
+          if [[ ${is_overwrite^^} == 'OVERWRITE' || ${is_overwrite^^} == 'O' || ${is_overwrite^^} == 'YES' || ${is_overwrite^^} == 'Y' ]]; then
+            changed_line="${file:0:1}-${file:1} overwrited by $operation_date-$local_branch"
+            _ssh "sed -i 's|$file|$changed_line|g' $branch_file"
+            echo "[ WARN ] $file will upload and overwrite."
+            break
+          elif [[ ${is_overwrite^^} == 'MANUALLY' || ${is_overwrite^^} == 'M' || ${is_overwrite^^} == 'NO' || ${is_overwrite^^} == 'N' ]]; then
+            changed_line="$file may be changed manually by $operation_date-$local_branch"
+            _ssh "sed -i 's|$file|$changed_line|g' $branch_file"
+            echo "[ WARN ] $file is excluded on upload. But it is included to compare list. Manual upload is required."
+            to_update_list+=($file)
+            break
+          elif [[ ${is_overwrite^^} == 'STOP' || ${is_overwrite^^} == 'S' ]]; then
+            echo "[ WARN ] Deploy operation may be cause conflicts."
+            operation_result="Stopped"
+            finish 1
+          else
+            echo "[ WARN ] Invalid command. Please type correct command."
+          fi
+        done
+      fi
+    done
+  done
+}
+
 save_history () {
-  rm -f changes.log
+  rm -f changes_$operation_date.log
   _ssh "mkdir -p $remote_history_path/"
-  _ssh_out "cat $remote_history_path/changes.log" > changes.log
-  echo "--- $operation_date ---" >> changes.log
+  _ssh_out "cat $remote_history_path/$local_branch.log" > changes_$operation_date.log
+  echo "--- $operation_date ---" >> changes_$operation_date.log
   for file in "${deleted_list[@]}"; do
-    echo "deleted $file" >> changes.log
+    echo "deleted $file" >> changes_$operation_date.log
   done
   for file in "${changed_list[@]}"; do
-    echo "updated $file" >> changes.log
+    echo "updated $file" >> changes_$operation_date.log
   done
   for file in "${to_update_list[@]}"; do
-    echo "updated $file manually" >> changes.log
+    echo "updated $file manually" >> changes_$operation_date.log
   done
-  _scp "changes.log" "$remote_history_path/changes.log"
-  rm -f changes.log
+  _scp "changes_$operation_date.log" "$remote_history_path/$local_branch.log"
+  rm -f changes_$operation_date.log
 }
 
 backup () {
@@ -307,6 +372,11 @@ _scp () {
 ####################################################################################################
 
 init () {
+  # Check git repo
+  if [[ ! -f $local_path/.git/ ]]; then
+    local_branch=$(cd $local_path && git branch --show-current)
+  fi
+
   # Display Initial Information
   echo "------------------------------ ${deployer_name^^} ----------------------- $deployer_version"
   echo "[ INFO ] Starting for $operation_mode mode."
@@ -315,6 +385,7 @@ init () {
   echo "  remote_port  : $remote_port"
   echo "  remote_path  : $remote_path"
   echo "  local_path   : $local_path"
+  echo "  local_branch : $local_branch"
   echo "  package_name : $package_name"
   echo "----------------------------------------------------------------------------"
   
