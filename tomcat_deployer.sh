@@ -2,7 +2,7 @@
 
 # Deployer Information
 deployer_name="Tomcat Deployer"
-deployer_version="0.0.8"
+deployer_version="0.0.9"
 
 # Help Information
 _help() {
@@ -79,13 +79,17 @@ operation_mode="$1"
 operation_result="Success"
 operation_date=$(date +"%Y_%m_%d__%H_%M")
 
+if [[ ${operation_mode^^} == "ROLLBACK" ]]; then
+  selected_backup="$2"
+fi
+
 # Global Variables
 skip_ssh_errors=1
 changed_list=()
 deleted_list=()
 to_update_list=()
 remote_conn="$remote_user@$remote_ip"
-remote_backup_path="$remote_path/temp/backups/$package_name/$operation_date"
+remote_backup_path="$remote_path/temp/backups/$package_name"
 remote_history_path="$remote_path/temp/deploy_history/$package_name"
 remote_package_path="$remote_path/webapps/$package_name"
 
@@ -298,15 +302,47 @@ save_history () {
   rm -f changes_$operation_date.log
 }
 
+rollback () {
+  backups=($(_ssh_out "ls $remote_path/temp/backups/$package_name/ | sort -r"))
+  if [[ ${#backups[@]} -eq 0 ]]; then
+    echo "[ WARN ] No backup folder detected to able to deploy."
+    operation_result="STOPPED"
+    finish 1
+  fi
+  if [[ -z "$selected_backup" ]]; then
+    echo "[ INFO ] Backups on this environment:"
+    for i in "${!backups[@]}"; do
+      backup="${backups[$i]}"
+      echo "  $i - $backup"
+    done
+    while true; do
+      echo "[ INFO ] Which backup do you want to go back to? (index): "
+      read selected_index
+      if [[ $selected_index -ge 0 && $selected_index -le $((${#backups[@]} - 1)) ]]; then
+        selected_backup=${backups[$selected_index]}
+        break
+      else
+        echo "[ WARN ] Invalid index, Please try again."
+      fi
+    done
+  fi
+  _ssh "rm -f $remote_package_path.war"
+  _ssh "cp -rfa $remote_path/temp/backups/$package_name/$selected_backup/$package_name/ $remote_path/webapps/"
+}
+
 backup () {
+  webapps=$(_ssh_out "ls $remote_path/webapps/")
+  if [[ "$webapps" != *"$package_name"* ]]; then
+    return 1
+  fi
   echo "[ INFO ] Do you want to back up $package_name package on server? (Y/n):"
   read is_backup
   if [[ ${is_backup^^} == 'YES' || ${is_backup^^} == 'Y' ]]; then
-    _ssh "mkdir -p $remote_backup_path/"
-    ssh -p $remote_port $remote_conn "rsync -avq --ignore-errors $remote_package_path $remote_backup_path/" # custom ssh for output
-    echo "[ INFO ] Backup is taken in $remote_backup_path/ folder."
-    echo "[ INFO ] You can rollback with this command on remote server :"
-    echo "  > cp -rfa $remote_backup_path/$package_name/ $remote_path/webapps/"
+    _ssh "mkdir -p $remote_backup_path/$operation_key/"
+    ssh -p $remote_port $remote_conn "rsync -avq --ignore-errors $remote_package_path $remote_backup_path/$operation_key/" # custom ssh for output
+    echo "[ INFO ] Backup is taken in $remote_backup_path/$operation_key/ folder. to rollback :"
+    echo "  on remote > cp -rfa $remote_backup_path/$operation_key/$package_name/ $remote_path/webapps/"
+    echo "  on local  > sh tomcat_deployer.sh rollback $operation_key ..."
   fi
 }
 
@@ -376,6 +412,7 @@ init () {
   if [[ ! -f $local_path/.git/ ]]; then
     local_branch=$(cd $local_path && git branch --show-current)
   fi
+  operation_key="${operation_date}__${operation_mode}__${local_branch}"
 
   # Display Initial Information
   echo "------------------------------ ${deployer_name^^} ----------------------- $deployer_version"
@@ -413,9 +450,11 @@ init () {
 
   # Check and Execute Operation
   if [[ ${operation_mode^^} == "DEPLOY" ]]; then
-    deploy_package  
+    deploy_package
   elif [[ ${operation_mode^^} == "UPDATE" ]]; then
     update_package
+  elif [[ ${operation_mode^^} == "ROLLBACK" ]]; then
+    rollback
   else
     echo "[ WARN ] Invalid operation mode: $operation_mode"
     finish 1
