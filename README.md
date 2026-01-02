@@ -26,9 +26,15 @@ sh tomcat_deployer.sh [operation] [options] [<goal(s)>] [<phase(s)>]
 ```
 
 ## Deployment Scenario
-
+Deploy your package directly within one of these commands:
 ```sh
-$ sh ./tomcat_deployer.sh deploy --remote-user yarligan -remote-ip localhost --remote-port 2222 --remote-path /opt/tomcat9 --local-path /c/Users/Fatih/restapi --package-name restapi_draft
+sh ./tomcat_deployer.sh deploy --remote-user yarligan --remote-ip localhost --remote-port 2222 --remote-path /opt/tomcat9 --local-path /c/Users/Fatih/restapi --package-name restapi_draft
+sh ./tomcat_deployer.sh deploy -remote-user yarligan -remote-ip localhost -remote-port 2222 -remote-path /opt/tomcat9 -local-path /c/Users/Fatih/restapi -package-name restapi_draft
+sh ./tomcat_deployer.sh deploy -u yarligan -i localhost -p 2222 -r /opt/tomcat9 -l /c/Users/Fatih/restapi -n restapi_draft
+sh ./tomcat_deployer.sh deploy -c profile_1.properties
+sh ./tomcat_deployer.sh deploy -c profile_1.properties -i remotehost # can be override configs
+```
+```sh
 ------------------------------ TOMCAT DEPLOYER ----------------------- 0.0.9
 [ INFO ] Starting for deploy mode.
   remote_user  : yarligan
@@ -57,7 +63,7 @@ overwrite
 [ INFO ] Removing current restapi_draft package on server.
   SSH command executed successfully.
 [ INFO ] Uploading restapi_draft package to server.
-restapi_draft.war                                                                                            100%   43MB 115.2MB/s   00:00    
+restapi_draft.war                                                    100%   43MB 115.2MB/s   00:00    
 [ INFO ] Do you want to restart tomcat? (Y/n):
 y
 Tomcat started.
@@ -65,10 +71,16 @@ Tomcat started.
 ```
 
 ### Update Mode
-Transfer only your changed files by git command.
+Transfer only your changed files by git command within one of these commands:
 ```sh
-$ sh ./tomcat_deployer.sh update --remote-user yarligan -remote-ip localhost --remote-port 2222 --remote-path /opt/tomcat9 --local-path /c/Users/Fatih/restapi --package-name restapi_draft
------------------------------- TOMCAT DEPLOYER ----------------------- 0.0.9
+sh ./tomcat_deployer.sh update --remote-user yarligan --remote-ip localhost --remote-port 2222 --remote-path /opt/tomcat9 --local-path /c/Users/Fatih/restapi --package-name restapi_draft
+sh ./tomcat_deployer.sh update -remote-user yarligan -remote-ip localhost -remote-port 2222 -remote-path /opt/tomcat9 -local-path /c/Users/Fatih/restapi -package-name restapi_draft
+sh ./tomcat_deployer.sh update -u yarligan -i localhost -p 2222 -r /opt/tomcat9 -l /c/Users/Fatih/restapi -n restapi_draft
+sh ./tomcat_deployer.sh update -c profile_1.properties
+sh ./tomcat_deployer.sh update -c profile_1.properties -i remotehost # can be override configs
+```
+```sh
+------------------------------ TOMCAT DEPLOYER ----------------------- 0.1.0
 [ INFO ] Starting for update mode.
   remote_user  : yarligan
   remote_ip    : localhost
@@ -123,10 +135,16 @@ Tomcat started.
 ```
 
 ### Rollback Mode
-Rollback your changes from the last backups.
+Rollback your changes from the last backups within one of these commands:
 ```sh
-$ sh ./tomcat_deployer.sh rollback --remote-user yarligan -remote-ip localhost --remote-port 2222 --remote-path /opt/tomcat9 --local-path /c/Users/Fatih/restapi --package-name restapi_draft
------------------------------- TOMCAT DEPLOYER ----------------------- 0.0.9
+sh ./tomcat_deployer.sh rollback --remote-user yarligan --remote-ip localhost --remote-port 2222 --remote-path /opt/tomcat9 --local-path /c/Users/Fatih/restapi --package-name restapi_draft
+sh ./tomcat_deployer.sh rollback -remote-user yarligan -remote-ip localhost -remote-port 2222 -remote-path /opt/tomcat9 -local-path /c/Users/Fatih/restapi -package-name restapi_draft
+sh ./tomcat_deployer.sh rollback -u yarligan -i localhost -p 2222 -r /opt/tomcat9 -l /c/Users/Fatih/restapi -n restapi_draft
+sh ./tomcat_deployer.sh rollback -c profile_1.properties
+sh ./tomcat_deployer.sh rollback -c profile_1.properties -i remotehost # can be override configs
+```
+```sh
+------------------------------ TOMCAT DEPLOYER ----------------------- 0.1.0
 [ INFO ] Starting for rollback mode.
   remote_user  : yarligan
   remote_ip    : localhost
@@ -150,4 +168,8 @@ $ sh ./tomcat_deployer.sh rollback --remote-user yarligan -remote-ip localhost -
 y
 Tomcat started.
 [ INFO ] >>> ROLLBACK SUCCESS <<<
+```
+to rollback with backup key:
+```sh
+sh ./tomcat_deployer.sh -c ./profile_1.properties rollback 2026_01_01__16_35__deploy__feature_test
 ```

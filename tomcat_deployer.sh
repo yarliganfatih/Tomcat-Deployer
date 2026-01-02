@@ -2,7 +2,7 @@
 
 # Deployer Information
 deployer_name="Tomcat Deployer"
-deployer_version="0.0.9"
+deployer_version="0.1.0"
 
 # Help Information
 _help() {
@@ -23,6 +23,7 @@ General options:
 -X, -xtrace,         --xtrace                Run script in xtrace mode. Will print out each step of execution.
 
 Required options for operaions:
+-c, -config-file,    --config-file <path>    Local path of config properties profile file.
 -u, -remote-user,    --remote-user <user>    Remote server user name.
 -i, -remote-ip,      --remote-ip <ip>        Remote server IP address.
 -p, -remote-port,    --remote-port <port>    Remote server SSH port. Default is 22.
@@ -33,15 +34,36 @@ EOF
 }
 
 # Default Values
-remote_user=""
-remote_ip=""
-remote_port="22"
-remote_path="/usr/share/tomcat"
-local_path="./"
-package_name=""
-local_branch="main"
+declare -A CONFIG
+CONFIG[remote_user]=""
+CONFIG[remote_ip]=""
+CONFIG[remote_port]="22"
+CONFIG[remote_path]="/usr/share/tomcat"
+CONFIG[local_path]="./"
+CONFIG[package_name]=""
 
-options=$(getopt -l "help,version,verbose,xtrace,remote-user:,remote-ip:,remote-port:,remote-path:,local-path:,package-name:" -o "hvVXu:i:p:r:l:n:" -a -- "$@")
+# Load from .properties file
+load_config () {
+  config_file=$1
+  if [[ -f $config_file ]]; then
+    while IFS='=' read -r key value || [[ -n "$key" ]]; do
+      key="${key//$'\r'/}"
+      value="${value//$'\r'/}"
+      key="${key## }"; key="${key%% }"
+      value="${value## }"; value="${value%% }"
+      if [[ "$key" =~ ^#.*$ || -z "$key" ]]; then
+        continue
+      fi
+      CONFIG["$key"]="$value"
+    done < "$config_file"
+  else
+    echo "[ ERROR ] Config file '$config_file' not found."
+    operation_result="Stopped"
+    exit 1
+  fi
+}
+
+options=$(getopt -l "help,version,verbose,xtrace,config-file:,remote-user:,remote-ip:,remote-port:,remote-path:,local-path:,package-name:" -o "hvVXc:u:i:p:r:l:n:" -a -- "$@")
 eval set -- "$options"
 while true; do
   case "$1" in
@@ -55,18 +77,20 @@ while true; do
     set -v ;;
   -X|--xtrace)
     set -x ;;
+  -c|--config-file)
+    load_config "$2";;
   -u|--remote-user)
-    remote_user="$2";;
+    CONFIG[remote_user]="$2";;
   -i|--remote-ip)
-    remote_ip="$2";;
+    CONFIG[remote_ip]="$2";;
   -p|--remote-port)
-    remote_port="$2";;
+    CONFIG[remote_port]="$2";;
   -r|--remote-path)
-    remote_path="$2";;
+    CONFIG[remote_path]="$2";;
   -l|--local-path)
-    local_path="$2";;
+    CONFIG[local_path]="$2";;
   -n|--package-name)
-    package_name="$2";;
+    CONFIG[package_name]="$2";;
   --)
     shift
     break;;
@@ -85,19 +109,20 @@ fi
 
 # Global Variables
 skip_ssh_errors=1
+local_branch="main"
 changed_list=()
 deleted_list=()
 to_update_list=()
-remote_conn="$remote_user@$remote_ip"
-remote_backup_path="$remote_path/temp/backups/$package_name"
-remote_history_path="$remote_path/temp/deploy_history/$package_name"
-remote_package_path="$remote_path/webapps/$package_name"
+remote_conn="${CONFIG[remote_user]}@${CONFIG[remote_ip]}"
+remote_backup_path="${CONFIG[remote_path]}/temp/backups/${CONFIG[package_name]}"
+remote_history_path="${CONFIG[remote_path]}/temp/deploy_history/${CONFIG[package_name]}"
+remote_package_path="${CONFIG[remote_path]}/webapps/${CONFIG[package_name]}"
 
 ####################################################################################################
 
 deploy_package () {
-  deleted_list=("$package_name.war")
-  changed_list=("$package_name.war")
+  deleted_list=("${CONFIG[package_name]}.war")
+  changed_list=("${CONFIG[package_name]}.war")
   to_update_list=()
 
   # Backup current package on remote server
@@ -115,12 +140,12 @@ deploy_package () {
   fi
 
   # Remove current package on remote server
-  echo "[ INFO ] Removing current $package_name package on server."
+  echo "[ INFO ] Removing current ${CONFIG[package_name]} package on server."
   _ssh "rm -rf $remote_package_path && rm -f $remote_package_path.war"
 
   # Upload Package from Local to Remote Server
-  echo "[ INFO ] Uploading $package_name package to server."
-  scp -P $remote_port "$local_path/target/$package_name.war" $remote_conn:$remote_path/webapps/
+  echo "[ INFO ] Uploading ${CONFIG[package_name]} package to server."
+  scp -P ${CONFIG[remote_port]} "${CONFIG[local_path]}/target/${CONFIG[package_name]}.war" $remote_conn:${CONFIG[remote_path]}/webapps/
 
   # Save change history
   save_history
@@ -128,14 +153,14 @@ deploy_package () {
 
 build_if_required() {
   local last_changed_file
-  last_changed_file=$(find "$local_path" -type f -printf '%T+ %p\n' | sort -r | head -n 1 | cut -d' ' -f2-)
+  last_changed_file=$(find "${CONFIG[local_path]}" -type f -printf '%T+ %p\n' | sort -r | head -n 1 | cut -d' ' -f2-)
   if [[ ! "$last_changed_file" == *.war ]]; then
-    echo "[ WARN ] Last built $package_name may not be up-to-date. Do you want to rebuild package? (Y/n):"
+    echo "[ WARN ] Last built ${CONFIG[package_name]} may not be up-to-date. Do you want to rebuild package? (Y/n):"
     read is_build
     if [[ ${is_build^^} == 'YES' || ${is_build^^} == 'Y' ]]; then
-      cd $local_path/ && mvn -DskipTests=true clean install | while read line; do
+      cd ${CONFIG[local_path]}/ && mvn -DskipTests=true clean install | while read line; do
         if [[ "$line" == *"BUILD SUCCESS"* ]]; then
-          echo "[ INFO ] mvn build $package_name success."
+          echo "[ INFO ] mvn build ${CONFIG[package_name]} success."
           break
         elif [[ "$line" == *"ERROR"* ]]; then
           echo $line
@@ -147,8 +172,8 @@ build_if_required() {
 }
 
 update_package () {
-  changed_list=($(cd $local_path && git diff --name-only --diff-filter=d HEAD))
-  deleted_list=($(cd $local_path && git diff --name-only --diff-filter=D HEAD))
+  changed_list=($(cd ${CONFIG[local_path]} && git diff --name-only --diff-filter=d HEAD))
+  deleted_list=($(cd ${CONFIG[local_path]} && git diff --name-only --diff-filter=D HEAD))
   to_update_list=()
 
   # Check changes
@@ -210,16 +235,16 @@ update_file() {
   fi
   if [[ "$file" == src/main/resources/* ]]; then
     resource_path="${file#src/main/resources/}"
-    local_file="$local_path/target/classes/$resource_path"
+    local_file="${CONFIG[local_path]}/target/classes/$resource_path"
     remote_file="$remote_package_path/WEB-INF/classes/$resource_path"
   elif [[ "$file" == src/main/java/* ]]; then
     class_path="${file#src/main/java/}"
     class_path="${class_path%.java}.class"
-    local_file="$local_path/target/classes/$class_path"
+    local_file="${CONFIG[local_path]}/target/classes/$class_path"
     remote_file="$remote_package_path/WEB-INF/classes/$class_path"
   elif [[ "$file" == src/main/webapp/* ]]; then
     web_path="${file#src/main/webapp/}"
-    local_file="$local_path/src/main/webapp/$web_path"
+    local_file="${CONFIG[local_path]}/src/main/webapp/$web_path"
     remote_file="$remote_package_path/$web_path"
   else
     to_update_list+=($file)
@@ -303,7 +328,7 @@ save_history () {
 }
 
 rollback () {
-  backups=($(_ssh_out "ls $remote_path/temp/backups/$package_name/ | sort -r"))
+  backups=($(_ssh_out "ls ${CONFIG[remote_path]}/temp/backups/${CONFIG[package_name]}/ | sort -r"))
   if [[ ${#backups[@]} -eq 0 ]]; then
     echo "[ WARN ] No backup folder detected to able to deploy."
     operation_result="STOPPED"
@@ -327,21 +352,21 @@ rollback () {
     done
   fi
   _ssh "rm -f $remote_package_path.war"
-  _ssh "cp -rfa $remote_path/temp/backups/$package_name/$selected_backup/$package_name/ $remote_path/webapps/"
+  _ssh "cp -rfa ${CONFIG[remote_path]}/temp/backups/${CONFIG[package_name]}/$selected_backup/${CONFIG[package_name]}/ ${CONFIG[remote_path]}/webapps/"
 }
 
 backup () {
-  webapps=$(_ssh_out "ls $remote_path/webapps/")
-  if [[ "$webapps" != *"$package_name"* ]]; then
+  webapps=$(_ssh_out "ls ${CONFIG[remote_path]}/webapps/")
+  if [[ "$webapps" != *"${CONFIG[package_name]}"* ]]; then
     return 1
   fi
-  echo "[ INFO ] Do you want to back up $package_name package on server? (Y/n):"
+  echo "[ INFO ] Do you want to back up ${CONFIG[package_name]} package on server? (Y/n):"
   read is_backup
   if [[ ${is_backup^^} == 'YES' || ${is_backup^^} == 'Y' ]]; then
     _ssh "mkdir -p $remote_backup_path/$operation_key/"
-    ssh -p $remote_port $remote_conn "rsync -avq --ignore-errors $remote_package_path $remote_backup_path/$operation_key/" # custom ssh for output
+    ssh -p ${CONFIG[remote_port]} $remote_conn "rsync -avq --ignore-errors $remote_package_path $remote_backup_path/$operation_key/" # custom ssh for output
     echo "[ INFO ] Backup is taken in $remote_backup_path/$operation_key/ folder. to rollback :"
-    echo "  on remote > cp -rfa $remote_backup_path/$operation_key/$package_name/ $remote_path/webapps/"
+    echo "  on remote > cp -rfa $remote_backup_path/$operation_key/${CONFIG[package_name]}/ ${CONFIG[remote_path]}/webapps/"
     echo "  on local  > sh tomcat_deployer.sh rollback $operation_key ..."
   fi
 }
@@ -350,7 +375,7 @@ restart_tomcat () {
   echo "[ INFO ] Do you want to restart tomcat? (Y/n):"
   read is_restart
   if [[ ${is_restart^^} == 'YES' || ${is_restart^^} == 'Y' ]]; then
-    ssh -p $remote_port $remote_conn "cd $remote_path/bin && sh ./shutdown.sh | grep 'Tomcat st' || true && sh ./startup.sh | grep 'Tomcat st'" 2>/dev/null
+    ssh -p ${CONFIG[remote_port]} $remote_conn "cd ${CONFIG[remote_path]}/bin && sh ./shutdown.sh | grep 'Tomcat st' || true && sh ./startup.sh | grep 'Tomcat st'" 2>/dev/null
   fi
 }
 
@@ -388,18 +413,18 @@ catch_error () {
 }
 
 _ssh () {
-  ssh -p $remote_port $remote_conn $1 2>&1 | catch_error "SSH command"
+  ssh -p ${CONFIG[remote_port]} $remote_conn $1 2>&1 | catch_error "SSH command"
   if [ $? -eq 1 ]; then
     after_error 0
   fi
 }
 
 _ssh_out () {
-  ssh -p $remote_port $remote_conn $1 2>/dev/null
+  ssh -p ${CONFIG[remote_port]} $remote_conn $1 2>/dev/null
 }
 
 _scp () {
-  scp -P $remote_port $1 $remote_conn:$2 2>&1 | catch_error "Upload operation"
+  scp -P ${CONFIG[remote_port]} $1 $remote_conn:$2 2>&1 | catch_error "Upload operation"
   if [ $? -eq 1 ]; then
     after_error 0
   fi
@@ -409,25 +434,25 @@ _scp () {
 
 init () {
   # Check git repo
-  if [[ ! -f $local_path/.git/ ]]; then
-    local_branch=$(cd $local_path && git branch --show-current)
+  if [[ ! -f ${CONFIG[local_path]}/.git/ ]]; then
+    local_branch=$(cd ${CONFIG[local_path]} && git branch --show-current)
   fi
   operation_key="${operation_date}__${operation_mode}__${local_branch}"
 
   # Display Initial Information
   echo "------------------------------ ${deployer_name^^} ----------------------- $deployer_version"
   echo "[ INFO ] Starting for $operation_mode mode."
-  echo "  remote_user  : $remote_user"
-  echo "  remote_ip    : $remote_ip"
-  echo "  remote_port  : $remote_port"
-  echo "  remote_path  : $remote_path"
-  echo "  local_path   : $local_path"
+  echo "  remote_user  : ${CONFIG[remote_user]}"
+  echo "  remote_ip    : ${CONFIG[remote_ip]}"
+  echo "  remote_port  : ${CONFIG[remote_port]}"
+  echo "  remote_path  : ${CONFIG[remote_path]}"
+  echo "  local_path   : ${CONFIG[local_path]}"
   echo "  local_branch : $local_branch"
-  echo "  package_name : $package_name"
+  echo "  package_name : ${CONFIG[package_name]}"
   echo "----------------------------------------------------------------------------"
   
   # Check Required Options
-  if [ -z "$remote_user" ] || [ -z "$remote_ip" ] || [ -z "$remote_port" ] || [ -z "$remote_path" ] || [ -z "$local_path" ] || [ -z "$package_name" ]; then
+  if [ -z "${CONFIG[remote_user]}" ] || [ -z "${CONFIG[remote_ip]}" ] || [ -z "${CONFIG[remote_port]}" ] || [ -z "${CONFIG[remote_path]}" ] || [ -z "${CONFIG[local_path]}" ] || [ -z "${CONFIG[package_name]}" ]; then
     echo "[ WARN ] Missing required options. Please provide all required options."
     echo "  Please check the help information with -h or --help."
     finish 1
@@ -442,7 +467,7 @@ init () {
   local_id_rsa=$(cat ~/.ssh/id_rsa.pub)
 
   # Check And Authorize Remote Configuration
-  ssh -p $remote_port $remote_conn "grep -Fxq \"$local_id_rsa\" ~/.ssh/authorized_keys || echo \"$local_id_rsa\" >> ~/.ssh/authorized_keys" 2>&1
+  ssh -p ${CONFIG[remote_port]} $remote_conn "grep -Fxq \"$local_id_rsa\" ~/.ssh/authorized_keys || echo \"$local_id_rsa\" >> ~/.ssh/authorized_keys" 2>&1
   ssh_exit_code=$?
   if [ $ssh_exit_code -ne 0 ]; then
     finish 1
