@@ -2,7 +2,7 @@
 
 # Deployer Information
 deployer_name="Tomcat Deployer"
-deployer_version="0.1.0"
+deployer_version="0.1.1"
 
 # Help Information
 _help() {
@@ -21,6 +21,7 @@ General options:
 -v, -version,        --version               Display $deployer_name version.
 -V, -verbose,        --verbose               Run script in verbose mode. Will print out each step of execution.
 -X, -xtrace,         --xtrace                Run script in xtrace mode. Will print out each step of execution.
+-f, -force           --force                 Auto reply as 'Yes' in all question.
 
 Required options for operaions:
 -c, -config-file,    --config-file <path>    Local path of config properties profile file.
@@ -51,9 +52,9 @@ load_config () {
       value="${value//$'\r'/}"
       key="${key## }"; key="${key%% }"
       value="${value## }"; value="${value%% }"
-      if [[ "$key" =~ ^#.*$ || -z "$key" ]]; then
-        continue
-      fi
+      [[ -z "$key" || "$key" =~ ^[[:space:]]*# ]] && continue
+      value="${value%%#*}"
+      value="${value## }"; value="${value%% }"
       CONFIG["$key"]="$value"
     done < "$config_file"
   else
@@ -63,7 +64,7 @@ load_config () {
   fi
 }
 
-options=$(getopt -l "help,version,verbose,xtrace,config-file:,remote-user:,remote-ip:,remote-port:,remote-path:,local-path:,package-name:" -o "hvVXc:u:i:p:r:l:n:" -a -- "$@")
+options=$(getopt -l "help,version,verbose,xtrace,force,config-file:,remote-user:,remote-ip:,remote-port:,remote-path:,local-path:,package-name:" -o "hvVXfc:u:i:p:r:l:n:" -a -- "$@")
 eval set -- "$options"
 while true; do
   case "$1" in
@@ -77,6 +78,11 @@ while true; do
     set -v ;;
   -X|--xtrace)
     set -x ;;
+  -f|--force)
+    CONFIG[is_backup]="Yes"
+    CONFIG[is_build]="Yes"
+    CONFIG[is_overwrite]="Yes"
+    CONFIG[is_restart]="Yes";;
   -c|--config-file)
     load_config "$2";;
   -u|--remote-user)
@@ -155,8 +161,9 @@ build_if_required() {
   local last_changed_file
   last_changed_file=$(find "${CONFIG[local_path]}" -type f -printf '%T+ %p\n' | sort -r | head -n 1 | cut -d' ' -f2-)
   if [[ ! "$last_changed_file" == *.war ]]; then
-    echo "[ WARN ] Last built ${CONFIG[package_name]} may not be up-to-date. Do you want to rebuild package? (Y/n):"
-    read is_build
+    echo "[ WARN ] Last built ${CONFIG[package_name]} may not be up-to-date. Do you want to rebuild package? (Y/n): ${CONFIG[is_build]}"
+    is_build=${CONFIG[is_build]}
+    [[ -z ${CONFIG[is_build]} ]] && read is_build
     if [[ ${is_build^^} == 'YES' || ${is_build^^} == 'Y' ]]; then
       cd ${CONFIG[local_path]}/ && mvn -DskipTests=true clean install | while read line; do
         if [[ "$line" == *"BUILD SUCCESS"* ]]; then
@@ -281,10 +288,10 @@ check_history () {
       fi
       if [[ "$branch_history" == *"$file"* ]]; then
         echo "[ WARN ] $file was changed in $remote_branch branch before (last changed: $remote_branch_last_change)."
-        
+        is_overwrite=${CONFIG[is_overwrite]}
         while true; do
-          echo "Do you still want to update this file? (Overwrite/Manually/Stop): "
-          read is_overwrite
+          echo "Do you still want to update this file? (Overwrite/Manually/Stop): ${CONFIG[is_overwrite]}"
+          [[ -z ${CONFIG[is_overwrite]} ]] && read is_overwrite
           if [[ ${is_overwrite^^} == 'OVERWRITE' || ${is_overwrite^^} == 'O' || ${is_overwrite^^} == 'YES' || ${is_overwrite^^} == 'Y' ]]; then
             changed_line="${file:0:1}-${file:1} overwrited by $operation_date-$local_branch"
             _ssh "sed -i 's|$file|$changed_line|g' $branch_file"
@@ -302,6 +309,7 @@ check_history () {
             finish 1
           else
             echo "[ WARN ] Invalid command. Please type correct command."
+            CONFIG[is_overwrite]=""; is_overwrite="" # to avoid infinity loop
           fi
         done
       fi
@@ -360,8 +368,9 @@ backup () {
   if [[ "$webapps" != *"${CONFIG[package_name]}"* ]]; then
     return 1
   fi
-  echo "[ INFO ] Do you want to back up ${CONFIG[package_name]} package on server? (Y/n):"
-  read is_backup
+  echo "[ INFO ] Do you want to back up ${CONFIG[package_name]} package on server? (Y/n): ${CONFIG[is_backup]}"
+  is_backup=${CONFIG[is_backup]}
+  [[ -z ${CONFIG[is_backup]} ]] && read is_backup
   if [[ ${is_backup^^} == 'YES' || ${is_backup^^} == 'Y' ]]; then
     _ssh "mkdir -p $remote_backup_path/$operation_key/"
     ssh -p ${CONFIG[remote_port]} $remote_conn "rsync -avq --ignore-errors $remote_package_path $remote_backup_path/$operation_key/" # custom ssh for output
@@ -372,8 +381,9 @@ backup () {
 }
 
 restart_tomcat () {
-  echo "[ INFO ] Do you want to restart tomcat? (Y/n):"
-  read is_restart
+  echo "[ INFO ] Do you want to restart tomcat? (Y/n): ${CONFIG[is_restart]}"
+  is_restart=${CONFIG[is_restart]}
+  [[ -z ${CONFIG[is_restart]} ]] && read is_restart
   if [[ ${is_restart^^} == 'YES' || ${is_restart^^} == 'Y' ]]; then
     ssh -p ${CONFIG[remote_port]} $remote_conn "cd ${CONFIG[remote_path]}/bin && sh ./shutdown.sh | grep 'Tomcat st' || true && sh ./startup.sh | grep 'Tomcat st'" 2>/dev/null
   fi
