@@ -208,7 +208,7 @@ trace_logs() {
 }
 
 update_package () {
-  changed_list=($(cd ${CONFIG[local_path]} && git diff --name-only --diff-filter=d HEAD))
+  changed_list=($(cd ${CONFIG[local_path]} && git diff --name-only --diff-filter=d HEAD && git ls-files --others --exclude-standard))
   deleted_list=($(cd ${CONFIG[local_path]} && git diff --name-only --diff-filter=D HEAD))
   to_update_list=()
 
@@ -220,14 +220,18 @@ update_package () {
   fi
 
   # Display changes
-  echo "[ INFO ] Changed files detected:"
-  for file in "${changed_list[@]}"; do
-    echo "  - $file"
-  done
-  echo "[ INFO ] Deleted files detected:"
-  for file in "${deleted_list[@]}"; do
-    echo "  - $file"
-  done
+  if [[ ! -z $changed_list ]]; then
+    echo "[ INFO ] Changed files detected:"
+    for file in "${changed_list[@]}"; do
+      echo "  - $file"
+    done
+  fi
+  if [[ ! -z $deleted_list ]]; then
+    echo "[ INFO ] Deleted files detected:"
+    for file in "${deleted_list[@]}"; do
+      echo "  - $file"
+    done
+  fi
 
   # Backup current package on remote server
   backup
