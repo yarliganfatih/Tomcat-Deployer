@@ -2,7 +2,7 @@
 
 # Deployer Information
 deployer_name="Tomcat Deployer"
-deployer_version="0.1.1"
+deployer_version="0.1.2"
 
 # Help Information
 _help() {
@@ -82,6 +82,7 @@ while true; do
     CONFIG[is_backup]="Yes"
     CONFIG[is_build]="Yes"
     CONFIG[is_overwrite]="Yes"
+    CONFIG[is_rollback]="Yes"
     CONFIG[is_restart]="Yes";;
   -c|--config-file)
     load_config "$2";;
@@ -174,6 +175,34 @@ build_if_required() {
           finish 1
         fi
       done
+    fi
+  fi
+}
+
+trace_logs() {
+  catched_exception=0 # to catch unchecked exceptions (RuntimeException)
+  while read line; do
+    if [[ "$line" == *"Started"*"in"*"seconds"* ]]; then
+      echo $line
+      break
+    elif [[ "$line" == *"Application run failed"* ]]; then
+      echo $line
+      catched_exception=1
+      break
+    fi
+  done < <(ssh -p ${CONFIG[remote_port]} $remote_conn "tail -f ${CONFIG[remote_path]}/logs/catalina.out")
+  
+  if [[ $catched_exception -eq 1 ]]; then
+    echo "[ WARN ] Application crashed, Do you want to rollback? (Y/n): ${CONFIG[is_rollback]}"
+    is_rollback=${CONFIG[is_rollback]}
+    [[ -z ${CONFIG[is_rollback]} ]] && read is_rollback
+    if [[ ${is_rollback^^} == 'YES' || ${is_rollback^^} == 'Y' ]]; then
+      operation_mode="Rollback"
+      selected_backup="$operation_key"
+      rollback
+      restart_tomcat
+    else
+      operation_result="Failure"
     fi
   fi
 }
@@ -342,7 +371,10 @@ rollback () {
     operation_result="STOPPED"
     finish 1
   fi
-  if [[ -z "$selected_backup" ]]; then
+  if [[ ! -z "$selected_backup" && "$backups" != *"$selected_backup"* ]]; then
+    echo "[ WARN ] There is no backup for $selected_backup"
+  fi
+  if [[ -z "$selected_backup" || "$backups" != *"$selected_backup"* ]]; then
     echo "[ INFO ] Backups on this environment:"
     for i in "${!backups[@]}"; do
       backup="${backups[$i]}"
@@ -386,6 +418,7 @@ restart_tomcat () {
   [[ -z ${CONFIG[is_restart]} ]] && read is_restart
   if [[ ${is_restart^^} == 'YES' || ${is_restart^^} == 'Y' ]]; then
     ssh -p ${CONFIG[remote_port]} $remote_conn "cd ${CONFIG[remote_path]}/bin && sh ./shutdown.sh | grep 'Tomcat st' || true && sh ./startup.sh | grep 'Tomcat st'" 2>/dev/null
+    trace_logs
   fi
 }
 

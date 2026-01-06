@@ -64,7 +64,7 @@ sh ./tomcat_deployer.sh deploy -c profile_1.properties
 sh ./tomcat_deployer.sh deploy -c profile_1.properties -i remotehost # can be override configs
 ```
 ```sh
------------------------------- TOMCAT DEPLOYER ----------------------- 0.1.1
+------------------------------ TOMCAT DEPLOYER ----------------------- 0.1.2
 [ INFO ] Starting for deploy mode.
   remote_user  : yarligan
   remote_ip    : localhost
@@ -93,6 +93,7 @@ overwrite
 restapi_draft.war                                                    100%   43MB 115.2MB/s   00:00    
 [ INFO ] Do you want to restart tomcat? (Y/n): Yes
 Tomcat started.
+2026-01-04 22:53:06.781 INFO 29367 --- [ main] c.draft.rest.MyJavaApplication : Started MyJavaApplication in 5.293 seconds (JVM running for 7.141)
 [ INFO ] >>> DEPLOY SUCCESS <<<
 ```
 
@@ -106,7 +107,7 @@ sh ./tomcat_deployer.sh update -c profile_1.properties
 sh ./tomcat_deployer.sh update -c profile_1.properties -i remotehost # can be override configs
 ```
 ```sh
------------------------------- TOMCAT DEPLOYER ----------------------- 0.1.1
+------------------------------ TOMCAT DEPLOYER ----------------------- 0.1.2
 [ INFO ] Starting for update mode.
   remote_user  : yarligan
   remote_ip    : localhost
@@ -154,7 +155,26 @@ manually
 [ INFO ] All changes updated successfully.
 [ INFO ] Do you want to restart tomcat? (Y/n): Yes
 Tomcat started.
+2026-01-04 22:53:06.781 INFO 29367 --- [ main] c.draft.rest.MyJavaApplication : Started MyJavaApplication in 5.293 seconds (JVM running for 7.141)
 [ INFO ] >>> UPDATE SUCCESS <<<
+```
+
+If any RuntimeException has occur after deploy, this script will ask if you want to do a rollback.
+```sh
+...
+[ INFO ] All changes updated successfully.
+[ INFO ] Do you want to restart tomcat? (Y/n): Yes
+Tomcat started.
+2026-01-04 22:52:32.029 ERROR 28855 --- [ main] o.s.boot.SpringApplication : Application run failed
+[ WARN ] Application crashed, Do you want to rollback? (Y/n):
+y
+  SSH command executed successfully.
+  SSH command executed successfully.
+[ INFO ] Do you want to restart tomcat? (Y/n): Yes
+Tomcat started.
+Tomcat started.
+2026-01-04 22:53:06.781 INFO 29367 --- [ main] c.draft.rest.MyJavaApplication : Started MyJavaApplication in 5.293 seconds (JVM running for 7.141)
+[ INFO ] >>> ROLLBACK SUCCESS <<<
 ```
 
 ### Rollback Mode
@@ -167,7 +187,7 @@ sh ./tomcat_deployer.sh rollback -c profile_1.properties
 sh ./tomcat_deployer.sh rollback -c profile_1.properties -i remotehost # can be override configs
 ```
 ```sh
------------------------------- TOMCAT DEPLOYER ----------------------- 0.1.1
+------------------------------ TOMCAT DEPLOYER ----------------------- 0.1.2
 [ INFO ] Starting for rollback mode.
   remote_user  : yarligan
   remote_ip    : localhost
@@ -189,6 +209,7 @@ sh ./tomcat_deployer.sh rollback -c profile_1.properties -i remotehost # can be 
   SSH command executed successfully.
 [ INFO ] Do you want to restart tomcat? (Y/n): Yes
 Tomcat started.
+2026-01-04 22:53:06.781 INFO 29367 --- [ main] c.draft.rest.MyJavaApplication : Started MyJavaApplication in 5.293 seconds (JVM running for 7.141)
 [ INFO ] >>> ROLLBACK SUCCESS <<<
 ```
 to rollback with backup key:
