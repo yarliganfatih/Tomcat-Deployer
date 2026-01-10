@@ -2,7 +2,7 @@
 
 # Deployer Information
 deployer_name="Tomcat Deployer"
-deployer_version="0.1.2"
+deployer_version="0.1.3"
 
 # Help Information
 _help() {
@@ -278,9 +278,13 @@ update_file() {
     local_file="${CONFIG[local_path]}/target/classes/$resource_path"
     remote_file="$remote_package_path/WEB-INF/classes/$resource_path"
   elif [[ "$file" == src/main/java/* ]]; then
-    class_path="${file#src/main/java/}"
-    class_path="${class_path%.java}.class"
+    java_path="${file#src/main/java/}"
+    class_path="${java_path%.java}.class"
+    inner_class_path="${java_path%.java}\$*.class"
     local_file="${CONFIG[local_path]}/target/classes/$class_path"
+    if [[ ! -z $(compgen -G "${CONFIG[local_path]}/target/classes/$inner_class_path") ]]; then
+      local_file="$local_file ${CONFIG[local_path]}/target/classes/$inner_class_path"
+    fi
     remote_file="$remote_package_path/WEB-INF/classes/$class_path"
   elif [[ "$file" == src/main/webapp/* ]]; then
     web_path="${file#src/main/webapp/}"
@@ -294,7 +298,7 @@ update_file() {
   if [[ "$1" == "upload" ]]; then
     echo "[ INFO ] Uploading $file"
     _ssh "mkdir -p \"$(dirname "$remote_file")\""
-    _scp "$local_file" "$remote_file"
+    _scp "$local_file" "$(dirname $remote_file)"
   elif [[ "$1" == "delete" ]]; then
     echo "[ INFO ] Removing $file"
     _ssh "rm -f \"$remote_file\""
