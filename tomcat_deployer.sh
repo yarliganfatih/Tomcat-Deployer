@@ -2,7 +2,7 @@
 
 # Deployer Information
 deployer_name="Tomcat Deployer"
-deployer_version="0.1.3"
+deployer_version="0.1.4"
 
 # Help Information
 _help() {
@@ -125,6 +125,15 @@ remote_backup_path="${CONFIG[remote_path]}/temp/backups/${CONFIG[package_name]}"
 remote_history_path="${CONFIG[remote_path]}/temp/deploy_history/${CONFIG[package_name]}"
 remote_package_path="${CONFIG[remote_path]}/webapps/${CONFIG[package_name]}"
 
+if [ -f "${CONFIG[local_path]}/build.gradle" ]; then # for gradle
+  local_package_path="${CONFIG[local_path]}/build/libs"
+elif [ -f "${CONFIG[local_path]}/pom.xml" ]; then # for maven
+  local_package_path="${CONFIG[local_path]}/target"
+else
+  echo "[ WARN ] No file (build.gradle or pom.xml) detected in '${CONFIG[local_path]}' to able to package."
+  finish 1
+fi
+
 ####################################################################################################
 
 deploy_package () {
@@ -152,7 +161,7 @@ deploy_package () {
 
   # Upload Package from Local to Remote Server
   echo "[ INFO ] Uploading ${CONFIG[package_name]} package to server."
-  scp -P ${CONFIG[remote_port]} "${CONFIG[local_path]}/target/${CONFIG[package_name]}.war" $remote_conn:${CONFIG[remote_path]}/webapps/
+  scp -P ${CONFIG[remote_port]} "$local_package_path/${CONFIG[package_name]}.war" $remote_conn:${CONFIG[remote_path]}/webapps/
 
   # Save change history
   save_history
@@ -166,15 +175,28 @@ build_if_required() {
     is_build=${CONFIG[is_build]}
     [[ -z ${CONFIG[is_build]} ]] && read is_build
     if [[ ${is_build^^} == 'YES' || ${is_build^^} == 'Y' ]]; then
-      cd ${CONFIG[local_path]}/ && mvn -DskipTests=true clean install | while read line; do
-        if [[ "$line" == *"BUILD SUCCESS"* ]]; then
-          echo "[ INFO ] mvn build ${CONFIG[package_name]} success."
-          break
-        elif [[ "$line" == *"ERROR"* ]]; then
-          echo $line
-          finish 1
-        fi
-      done
+      cd ${CONFIG[local_path]}/
+      if [ -f "${CONFIG[local_path]}/build.gradle" ]; then
+        gradle build -x test | while read line; do
+          if [[ "$line" == *"BUILD SUCCESSFUL"* ]]; then
+            echo "[ INFO ] gradle build ${CONFIG[package_name]} success."
+            break
+          elif [[ "$line" == *"FAILURE"* ]]; then
+            echo $line
+            finish 1
+          fi
+        done
+      elif [ -f "${CONFIG[local_path]}/pom.xml" ]; then
+        mvn -DskipTests=true clean install | while read line; do
+          if [[ "$line" == *"BUILD SUCCESS"* ]]; then
+            echo "[ INFO ] mvn build ${CONFIG[package_name]} success."
+            break
+          elif [[ "$line" == *"ERROR"* ]]; then
+            echo $line
+            finish 1
+          fi
+        done
+      fi
     fi
   fi
 }
@@ -238,6 +260,7 @@ update_package () {
   
   # Check package for up-to-date
   build_if_required
+  unzip -qqo "$local_package_path/${CONFIG[package_name]}.war" -d "$local_package_path/${CONFIG[package_name]}/"
 
   # Check change history on remote server
   check_history
@@ -275,15 +298,15 @@ update_file() {
   fi
   if [[ "$file" == src/main/resources/* ]]; then
     resource_path="${file#src/main/resources/}"
-    local_file="${CONFIG[local_path]}/target/classes/$resource_path"
+    local_file="$local_package_path/${CONFIG[package_name]}/WEB-INF/classes/$resource_path"
     remote_file="$remote_package_path/WEB-INF/classes/$resource_path"
   elif [[ "$file" == src/main/java/* ]]; then
     java_path="${file#src/main/java/}"
     class_path="${java_path%.java}.class"
     inner_class_path="${java_path%.java}\$*.class"
-    local_file="${CONFIG[local_path]}/target/classes/$class_path"
-    if [[ ! -z $(compgen -G "${CONFIG[local_path]}/target/classes/$inner_class_path") ]]; then
-      local_file="$local_file ${CONFIG[local_path]}/target/classes/$inner_class_path"
+    local_file="$local_package_path/${CONFIG[package_name]}/WEB-INF/classes/$class_path"
+    if [[ ! -z $(compgen -G "$local_package_path/${CONFIG[package_name]}/WEB-INF/classes/$inner_class_path") ]]; then
+      local_file="$local_file $local_package_path/${CONFIG[package_name]}/WEB-INF/classes/$inner_class_path"
     fi
     remote_file="$remote_package_path/WEB-INF/classes/$class_path"
   elif [[ "$file" == src/main/webapp/* ]]; then
